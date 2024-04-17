@@ -1,9 +1,11 @@
 from advanced_techniques import apply_advanced_techniques
+from print_solution import *
+
 
 import pyautogui as pg
 import os
 import time
-import sys
+import tracemalloc
 
 class SudokuCell:
     def __init__(self, row, col):
@@ -45,12 +47,8 @@ class SudokuBoard:
     def __init__(self):
         self.board = [[SudokuCell(i, j) for j in range(9)] for i in range(9)]
         self.result_board = None
-        self.memory_cost = 0
-        self.time_cost = 0
+        self.steps = []
         self.solution_file = os.path.join(os.path.dirname(os.path.realpath('__file__')), "solution.txt")
-
-    def apply_advanced_techniques(self):
-        apply_advanced_techniques(self.board)
 
     def initialize_board(self):
         print("Please enter the initial Sudoku board (use 0 for empty cells):")
@@ -71,95 +69,111 @@ class SudokuBoard:
 
         self.apply_advanced_techniques()
 
-    def solve_sudoku(self):
-        self.start_time = time.time()
-        initial_memory = sys.getsizeof(self.board)
-
+    def solve_by_mrv(self):
         with open(self.solution_file, "w") as file:
-            file.write("")
+            file.write("Solving Sudoku using MRV...\n")
 
-        if self.backtrack():
-            self.time_cost = time.time() - self.start_time
-            final_memory = sys.getsizeof(self.board)
-            self.memory_cost = final_memory - initial_memory
-            self.result_board = [[cell.value for cell in row] for row in self.board]  
+        if self.backtrack_mrv():
+            self.result_board = [[cell.value for cell in row] for row in self.board]
             return True
         else:
             return False
 
-    def backtrack(self):
+    def backtrack_mrv(self):
         empty_cell = self.find_least_possible_values()
-        if empty_cell is None:
-            self.print_final_board()  
+        if not empty_cell:
             return True
 
         row, col = empty_cell.row, empty_cell.col
         for value in empty_cell.possible_values:
-            snapshot = list(empty_cell.possible_values)  
             empty_cell.set_value(value, self.board)
-            self.print_board_step(row, col, value, snapshot)
-            if self.backtrack():
+            board_state = tuple(tuple(cell.value if cell.value != 0 else 0 for cell in row) for row in self.board)
+            self.steps.append((row, col, value, board_state))
+            if self.backtrack_mrv():
                 return True
+            self.steps.pop()
             empty_cell.set_value(0, self.board)
 
         return False
 
     def find_least_possible_values(self):
         min_possible_values = float('inf')
-        min_cell = None
+        min_cells = []
         for i in range(9):
             for j in range(9):
-                if self.board[i][j].value == 0 and len(self.board[i][j].possible_values) < min_possible_values:
-                    min_possible_values = len(self.board[i][j].possible_values)
-                    min_cell = self.board[i][j]
-        return min_cell
+                if self.board[i][j].value == 0:
+                    num_possible_values = len(self.board[i][j].possible_values)
+                    if num_possible_values < min_possible_values:
+                        min_possible_values = num_possible_values
+                        min_cells = [(i, j)]
+                    elif num_possible_values == min_possible_values:
+                        min_cells.append((i, j))
 
-    def print_board_step(self, row, col, value, possible_values):
-        with open(self.solution_file, "a") as file:
-            file.write(f"Choosing {value} from list of possible values {possible_values} at position ({row},{col}).\n")
-            file.write("Board state after setting this value:\n")
-            self.print_current_board(file)
+        if len(min_cells) == 1:
+            return self.board[min_cells[0][0]][min_cells[0][1]]
+        else:
+            max_degree_cell = None
+            max_degree = 0
+            for row, col in min_cells:
+                cell = self.board[row][col]
+                degree = self.get_degree(cell, self.board)
+                if degree > max_degree:
+                    max_degree = degree
+                    max_degree_cell = cell
+            return max_degree_cell
 
-    def print_current_board(self, file):
+    def get_degree(self, cell, board):
+        degree = 0
         for i in range(9):
-            if i % 3 == 0 and i != 0:
-                file.write("- - - - - - - - - - - -\n")
-            for j in range(9):
-                if j % 3 == 0 and j != 0:
-                    file.write("| ")
-                cell_value = str(self.board[i][j].value) if self.board[i][j].value != 0 else "."
-                if j == 8:
-                    file.write(cell_value + "\n")
-                else:
-                    file.write(cell_value + " ")
-        file.write("\n")
+            if board[cell.row][i].value != 0:
+                degree += 1
+            if board[i][cell.col].value != 0:
+                degree += 1
+        box_x, box_y = cell.col // 3, cell.row // 3
+        for i in range(box_y * 3, box_y * 3 + 3):
+            for j in range(box_x * 3, box_x * 3 + 3):
+                if board[i][j].value != 0:
+                    degree += 1
+        return degree
 
-    def print_final_board(self):
-        with open(self.solution_file, "a") as file:
-            file.write("Final board configuration:\n")
-            self.print_current_board(file)
+    def apply_advanced_techniques(self):
+        apply_advanced_techniques(self.board)
+
+    def print_board_state(self, row, col, value, board_state):
+        print_board_state(self.solution_file, row, col, value, board_state)
+
+    def print_solution(self):
+        for step in self.steps:
+                row, col, value, board_state = step
+                self.print_board_state(row, col, value, board_state)
+
+tracemalloc.start()
 
 sudoku_board = SudokuBoard()
-sudoku_board.initialize_board()  
-if sudoku_board.solve_sudoku():
-    
+sudoku_board.initialize_board()
+start_time = time.time()
+if sudoku_board.solve_by_mrv():
+    sudoku_board.print_solution()
     print("Result Board:")
     for row in sudoku_board.result_board:
         print(row)
     print("---------------------------------------------------------------------------")
-    print(f"Solution found in {sudoku_board.time_cost:.2f} seconds, using {sudoku_board.memory_cost} bytes of memory.") 
+    current, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    time_cost = time.time() - start_time
+    print(f"Solution found in {time_cost:.3f} seconds, using {peak / (1024 ** 2):.3f} MB of memory.")
     print("Steps and final board configuration recorded in solution.txt.")
 else:
     print("No solution exists.")
 
-# Display the solution on the screen
-time.sleep(5)
+# # Display the solution on the screen
+# time.sleep(5)
 
-for i, row in enumerate(sudoku_board.result_board):  
-    for j, num in enumerate(row):
-        pg.press(str(num), interval=0.0001)
-        if j < 8:
-            pg.press('right', presses=1, interval=0.01)
-        else:
-            pg.press('down', presses=1, interval=0.01)
-            pg.press('left', presses=8, interval=0.01)
+# for i, row in enumerate(sudoku_board.result_board):  
+#     for j, num in enumerate(row):
+#         pg.press(str(num), interval=0.0001)
+#         if j < 8:
+#             pg.press('right', presses=1, interval=0.01)
+#         else:
+#             pg.press('down', presses=1, interval=0.01)
+#             pg.press('left', presses=8, interval=0.01)

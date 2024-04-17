@@ -27,9 +27,6 @@ def find_xwing(board):
                             cell.update_possible_values(board)
 
 def find_ywing(board):
-    """
-    Áp dụng kỹ thuật Ywing để loại trừ các giá trị khỏi các ô có thể.
-    """
     for i in range(9):
         for j in range(9):
             cell1 = board[i][j]
@@ -41,7 +38,6 @@ def find_ywing(board):
                             if l != i and l != j and l != k:
                                 cell3 = board[l][k]
                                 if len(cell3.possible_values) == 2 and cell3.possible_values == cell1.possible_values:
-                                    # Loại trừ các giá trị của cell1 và cell2 khỏi các ô có thể trong cùng một ô vuông với cell3
                                     box_x, box_y = k // 3, l // 3
                                     for m in range(box_y * 3, box_y * 3 + 3):
                                         for n in range(box_x * 3, box_x * 3 + 3):
